@@ -79,7 +79,6 @@ def preprocess_shellcode(shellcode):
 
 def convert(shellcode):
     shellcode = preprocess_shellcode(shellcode)
-    dynamics = ''
     for line in shellcode.rsplit('\n'):
         if 'xor' in line:
             if '$0x' in line:
