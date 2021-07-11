@@ -436,6 +436,7 @@ def parse_mov_opcode(line, shellcode):
             shellcode = shellcode.replace(line, rep)
         if '%bl' in line.rsplit(',')[1]:
             rep = str('b3') + str(line.rsplit('$0x')[1].rsplit(',')[0])
+            shellcode = shellcode.replace(line, rep)
 
     return shellcode
 
