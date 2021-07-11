@@ -487,23 +487,17 @@ def compatible_stacker(value):
 
 
 def parse_push_opcode(line, shellcode):
-    if len(line) == 9:
-        rep = str('6a0') + parse_immediate_hex_value(line)
+    prefix = ''
+    if len(line) in [9, 15]:
+        prefix = '0'
+    if len(line) in [9, 10]:
+        rep = str('6a') + prefix + parse_immediate_hex_value(line)
         shellcode = shellcode.replace(line, rep, 1)
-    if len(line) == 10:
-        rep = str('6a') + parse_immediate_hex_value(line)
-        shellcode = shellcode.replace(line, rep, 1)
-    if len(line) == 15:
-        if version() == 2:
-            rep = str('68') + stack.st(str(binascii.a2b_hex(str(
-                '0') + parse_immediate_hex_value(line))))
-        if version() == 3:
-            rep = str('68') + stack.st((binascii.a2b_hex((str(
-                '0') + parse_immediate_hex_value(line)).encode('latin-1'))
-            ).decode('latin-1'))
-        shellcode = shellcode.replace(line, rep)
-    if len(line) == 16:
-        rep = str('68') + compatible_stacker(parse_immediate_hex_value(line))
+    if len(line) in [15, 16]:
+        immediate_value = parse_immediate_hex_value(line)
+        if len(line) == 15:
+            immediate_value = '0' + immediate_value
+        rep = str('68') + compatible_stacker(immediate_value)
         shellcode = shellcode.replace(line, rep)
 
     return shellcode
