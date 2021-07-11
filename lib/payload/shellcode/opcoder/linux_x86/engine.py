@@ -186,18 +186,6 @@ def get_registry_opcode(line, cmd):
     return __get_short_eax_opcode(line, cmd)
 
 
-def get_registry_opcode_xor(line):
-    return get_registry_opcode(line, 'xor')
-
-
-def get_registry_opcode_add(line):
-    return get_registry_opcode(line, 'add')
-
-
-def get_registry_opcode_sub(line):
-    return get_registry_opcode(line, 'sub')
-
-
 def parse_sub_opcode(line, shellcode):
     """
     >>> parse_sub_opcode('sub $0x1,%eax', 'sub $0x1,%eax')
