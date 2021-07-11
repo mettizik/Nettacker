@@ -429,27 +429,38 @@ def parse_immediate_hex_value(line):
     '10'
     >>> parse_immediate_hex_value('mov $0x1')
     '1'
+
+    What about values more than 0xff ???
     """
 
     return str(line.rsplit('$0x')[1].rsplit(',')[0])
 
 
-def parse_mov_opcode(line, shellcode):
+def get_second_operand(line):
     """
-    >>> parse_mov_opcode('mov $0x10,%al', 'mov $0x10,%al')
+    >>> get_second_operand('mov $0x10,%al')
+    '%al'
+    >>> get_second_operand('mov %bl,$0x10')
+    '$0x10'
+    """
+    return line.rsplit(',')[1]
+
+
+def parse_mov_opcode(line):
+    """
+    >>> parse_mov_opcode('mov $0x10,%al')
     'b010'
-    >>> parse_mov_opcode('mov $0x10,%bl', 'mov $0x10,%bl')
+    >>> parse_mov_opcode('mov $0x10,%bl')
     'b310'
     """
+    rep = None
     if len(line) == 13 or len(line) == 12:
-        if '%al' in line.rsplit(',')[1]:
+        if '%al' in get_second_operand(line):
             rep = 'b0' + parse_immediate_hex_value(line)
-            shellcode = shellcode.replace(line, rep)
-        if '%bl' in line.rsplit(',')[1]:
+        if '%bl' in get_second_operand(line):
             rep = 'b3' + parse_immediate_hex_value(line)
-            shellcode = shellcode.replace(line, rep)
 
-    return shellcode
+    return rep
 
 
 def convert(shellcode):
@@ -463,7 +474,9 @@ def convert(shellcode):
         if 'sub' in line:
             shellcode = parse_sub_opcode(line, shellcode)
         if 'mov $0x' in line:
-            shellcode = parse_mov_opcode(line, shellcode)
+            opcode = parse_mov_opcode(line)
+            if opcode:
+                shellcode = shellcode.replace(line, opcode)
         if 'push $0x' in line:
             if len(line) == 9:
                 rep = str('6a0') + str(line.rsplit('$0x')[1])
