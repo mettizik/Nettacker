@@ -70,15 +70,17 @@ replace_values_static = {
     'int $0x80': 'cd 80',
 }
 
-
-def convert(shellcode):
+def preprocess_shellcode(shellcode):
     shellcode = shellcode.replace('\n\n', '\n').replace('\n\n', '\n').replace(
         '    ', ' ').replace('   ', ' ')
     for data in replace_values_static:
         shellcode = shellcode.replace(data, replace_values_static[data])
-    new_shellcode = shellcode.rsplit('\n')
+    return shellcode
+
+def convert(shellcode):
+    shellcode = preprocess_shellcode(shellcode)
     dynamics = ''
-    for line in new_shellcode:
+    for line in shellcode.rsplit('\n'):
         if 'xor' in line:
             if '$0x' in line:
                 if '%eax' in line.rsplit(',')[1]:
