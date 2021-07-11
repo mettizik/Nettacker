@@ -425,15 +425,28 @@ def parse_sub_opcode(line, shellcode):
 
 def parse_immediate_hex_value(line):
     """
-    >>> parse_immediate_hex_value('mov $0x10,%al')
+    >>> parse_immediate_hex_value('$0x10')
     '10'
-    >>> parse_immediate_hex_value('mov $0x1')
+    >>> parse_immediate_hex_value('$0x123')
+    '123'
+
+    What about values more than 0xff ???
+    """
+
+    return str(line.rsplit('$0x')[1])
+
+
+def parse_immediate_hex_value_in_first_op(line):
+    """
+    >>> parse_immediate_hex_value_in_first_op('mov $0x10,%al')
+    '10'
+    >>> parse_immediate_hex_value_in_first_op('mov $0x1')
     '1'
 
     What about values more than 0xff ???
     """
 
-    return str(line.rsplit('$0x')[1].rsplit(',')[0])
+    return parse_immediate_hex_value(line).rsplit(',')[0]
 
 
 def get_second_operand(line):
@@ -456,36 +469,36 @@ def parse_mov_opcode(line):
     rep = None
     if len(line) == 13 or len(line) == 12:
         if '%al' in get_second_operand(line):
-            rep = 'b0' + parse_immediate_hex_value(line)
+            rep = 'b0' + parse_immediate_hex_value_in_first_op(line)
         if '%bl' in get_second_operand(line):
-            rep = 'b3' + parse_immediate_hex_value(line)
+            rep = 'b3' + parse_immediate_hex_value_in_first_op(line)
 
     return rep
 
 
 def parse_push_opcode(line, shellcode):
     if len(line) == 9:
-        rep = str('6a0') + str(line.rsplit('$0x')[1])
+        rep = str('6a0') + parse_immediate_hex_value(line)
         shellcode = shellcode.replace(line, rep, 1)
     if len(line) == 10:
-        rep = str('6a') + str(line.rsplit('$0x')[1])
+        rep = str('6a') + parse_immediate_hex_value(line)
         shellcode = shellcode.replace(line, rep, 1)
     if len(line) == 15:
         if version() == 2:
             rep = str('68') + stack.st(str(binascii.a2b_hex(str(
-                '0') + str(line.rsplit('$0x')[1]))))
+                '0') + parse_immediate_hex_value(line))))
         if version() == 3:
             rep = str('68') + stack.st((binascii.a2b_hex((str(
-                '0') + str(line.rsplit('$0x')[1])).encode('latin-1'))
+                '0') + parse_immediate_hex_value(line)).encode('latin-1'))
             ).decode('latin-1'))
         shellcode = shellcode.replace(line, rep)
     if len(line) == 16:
         if version() == 2:
-            rep = str('68') + stack.st(str(binascii.a2b_hex(str(
-                line.rsplit('$0x')[1]))))
+            rep = str(
+                '68') + stack.st(str(binascii.a2b_hex(parse_immediate_hex_value(line))))
         if version() == 3:
-            rep = str('68') + stack.st(((binascii.a2b_hex((line.rsplit(
-                '$0x')[1]).encode('latin-1'))).decode('latin-1')))
+            rep = str('68') + stack.st(((binascii.a2b_hex(
+                parse_immediate_hex_value(line).encode('latin-1'))).decode('latin-1')))
         shellcode = shellcode.replace(line, rep)
 
     return shellcode
