@@ -476,6 +476,16 @@ def parse_mov_opcode(line):
     return rep
 
 
+def compatible_stacker(value):
+    rep = None
+    if version() == 2:
+        return stack.st(str(binascii.a2b_hex(value)))
+    if version() == 3:
+        return stack.st(((binascii.a2b_hex(value.encode('latin-1'))).decode('latin-1')))
+
+    return rep
+
+
 def parse_push_opcode(line, shellcode):
     if len(line) == 9:
         rep = str('6a0') + parse_immediate_hex_value(line)
@@ -493,12 +503,7 @@ def parse_push_opcode(line, shellcode):
             ).decode('latin-1'))
         shellcode = shellcode.replace(line, rep)
     if len(line) == 16:
-        if version() == 2:
-            rep = str(
-                '68') + stack.st(str(binascii.a2b_hex(parse_immediate_hex_value(line))))
-        if version() == 3:
-            rep = str('68') + stack.st(((binascii.a2b_hex(
-                parse_immediate_hex_value(line).encode('latin-1'))).decode('latin-1')))
+        rep = str('68') + compatible_stacker(parse_immediate_hex_value(line))
         shellcode = shellcode.replace(line, rep)
 
     return shellcode
