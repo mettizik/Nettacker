@@ -423,6 +423,17 @@ def parse_sub_opcode(line, shellcode):
     return shellcode
 
 
+def parse_immediate_hex_value(line):
+    """
+    >>> parse_immediate_hex_value('mov $0x10,%al')
+    '10'
+    >>> parse_immediate_hex_value('mov $0x1')
+    '1'
+    """
+
+    return str(line.rsplit('$0x')[1].rsplit(',')[0])
+
+
 def parse_mov_opcode(line, shellcode):
     """
     >>> parse_mov_opcode('mov $0x10,%al', 'mov $0x10,%al')
@@ -432,10 +443,10 @@ def parse_mov_opcode(line, shellcode):
     """
     if len(line) == 13 or len(line) == 12:
         if '%al' in line.rsplit(',')[1]:
-            rep = str('b0') + str(line.rsplit('$0x')[1].rsplit(',')[0])
+            rep = 'b0' + parse_immediate_hex_value(line)
             shellcode = shellcode.replace(line, rep)
         if '%bl' in line.rsplit(',')[1]:
-            rep = str('b3') + str(line.rsplit('$0x')[1].rsplit(',')[0])
+            rep = 'b3' + parse_immediate_hex_value(line)
             shellcode = shellcode.replace(line, rep)
 
     return shellcode
