@@ -463,8 +463,11 @@ def parse_mov_opcode(line):
     return rep
 
 
-def convert(shellcode):
-    shellcode = preprocess_shellcode(shellcode)
+def process_shellcode_lines(shellcode):
+    """
+    >>> process_shellcode_lines('mov $0x10,%bl')
+    'b310'
+    """
     shellcode_lines = shellcode.rsplit('\n')
     for line in shellcode_lines:
         if 'xor' in line:
@@ -501,5 +504,12 @@ def convert(shellcode):
                     rep = str('68') + stack.st(((binascii.a2b_hex((line.rsplit(
                         '$0x')[1]).encode('latin-1'))).decode('latin-1')))
                 shellcode = shellcode.replace(line, rep)
+
+    return shellcode
+
+
+def convert(shellcode):
+    shellcode = preprocess_shellcode(shellcode)
+    shellcode = process_shellcode_lines(shellcode)
     shellcode = stack.shellcoder(shellcode.replace('\n', '').replace(' ', ''))
     return shellcode
