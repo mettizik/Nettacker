@@ -509,6 +509,10 @@ def process_shellcode_lines(shellcode):
 
 
 def convert(shellcode):
+    """
+    >>> convert('mov $0x10,%bl')
+    '\\\\xb3\\\\x10'
+    """
     shellcode = preprocess_shellcode(shellcode)
     shellcode = process_shellcode_lines(shellcode)
     shellcode = stack.shellcoder(shellcode.replace('\n', '').replace(' ', ''))
