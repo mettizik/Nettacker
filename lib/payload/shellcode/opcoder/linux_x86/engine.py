@@ -211,17 +211,25 @@ def parse_sub_opcode(line, shellcode):
     return __generic_opcode_parse(line, shellcode, 'sub')
 
 
-def parse_immediate_hex_value(line):
+def __pad(value, pad):
+    if len(value) % 2 and pad:
+        return '0' + value
+
+    return value
+
+
+def parse_immediate_hex_value(line, pad=False):
     """
     >>> parse_immediate_hex_value('$0x10')
     '10'
     >>> parse_immediate_hex_value('$0x123')
     '123'
-
-    What about values more than 0xff ???
+    >>> parse_immediate_hex_value('$0x1', pad=True)
+    '01'
+    >>> parse_immediate_hex_value('$0x1', pad=False)
+    '1'
     """
-
-    return str(line.rsplit('$0x')[1])
+    return __pad(str(line.rsplit('$0x')[1]), pad)
 
 
 def parse_immediate_hex_value_in_first_op(line, pad=False):
@@ -236,10 +244,7 @@ def parse_immediate_hex_value_in_first_op(line, pad=False):
     What about values more than 0xff ???
     """
 
-    result = parse_immediate_hex_value(line).rsplit(',')[0]
-    if len(result) % 2 and pad:
-        return '0' + result
-    return result
+    return __pad(parse_immediate_hex_value(line).rsplit(',')[0], pad)
 
 
 def get_second_operand(line):
@@ -284,16 +289,11 @@ def compatible_stacker_with_preppend(predefined, value_to_stack):
 
 
 def parse_push_opcode(line, shellcode):
-    prefix = ''
-    if len(line) in [9, 15]:
-        prefix = '0'
     if len(line) in [9, 10]:
-        rep = str('6a') + prefix + parse_immediate_hex_value(line)
+        rep = str('6a') + parse_immediate_hex_value(line, pad=True)
         shellcode = shellcode.replace(line, rep, 1)
     if len(line) in [15, 16]:
-        immediate_value = parse_immediate_hex_value(line)
-        if len(line) == 15:
-            immediate_value = '0' + immediate_value
+        immediate_value = parse_immediate_hex_value(line, pad=True)
         rep = str('68') + compatible_stacker(immediate_value)
         shellcode = shellcode.replace(line, rep)
 
