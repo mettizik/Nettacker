@@ -70,381 +70,265 @@ replace_values_static = {
     'int $0x80': 'cd 80',
 }
 
+OPCODES_FOR_REGS = {
+    '%eax': {
+        'add': '05',
+        'xor': '35',
+        'sub': '2d'
+    },
+    '%ebx': {
+        'add': '81 c3',
+        'xor': '81 f3',
+        'sub': '81 eb'
+    },
+    '%ecx': {
+        'add': '81 c1',
+        'xor': '81 f1',
+        'sub': '81 e9'
+    },
+    '%edx': {
+        'add': '81 c2',
+        'xor': '81 f2',
+        'sub': '81 ea'
+    }
+}
 
-def convert(shellcode):
+
+def preprocess_shellcode(shellcode):
     shellcode = shellcode.replace('\n\n', '\n').replace('\n\n', '\n').replace(
         '    ', ' ').replace('   ', ' ')
     for data in replace_values_static:
         shellcode = shellcode.replace(data, replace_values_static[data])
-    new_shellcode = shellcode.rsplit('\n')
-    dynamics = ''
-    for line in new_shellcode:
+    return shellcode
+
+
+def parse_xor_opcode(line, shellcode):
+    """
+    >>> parse_xor_opcode('xor $0x10,%eax', 'xor $0x10,%eax')
+    '83 f010'
+    >>> parse_xor_opcode('xor $0x1,%eax', 'xor $0x1,%eax')
+    '83 f001'
+    >>> parse_xor_opcode('xor $0x10000000,%eax', 'xor $0x10000000,%eax')
+    '3500000010'
+    >>> parse_xor_opcode('xor $0x1000000,%eax', 'xor $0x1000000,%eax')
+    '3500000001'
+    >>> parse_xor_opcode('xor $0x10000000,%ebx', 'xor $0x10000000,%ebx')
+    '81 f300000010'
+    >>> parse_xor_opcode('xor $0x1000000,%ebx', 'xor $0x1000000,%ebx')
+    '81 f300000001'
+    >>> parse_xor_opcode('xor $0x10000000,%ecx', 'xor $0x10000000,%ecx')
+    '81 f100000010'
+    >>> parse_xor_opcode('xor $0x1000000,%ecx', 'xor $0x1000000,%ecx')
+    '81 f100000001'
+    >>> parse_xor_opcode('xor $0x10000000,%edx', 'xor $0x10000000,%edx')
+    '81 f200000010'
+    >>> parse_xor_opcode('xor $0x1000000,%edx', 'xor $0x1000000,%edx')
+    '81 f200000001'
+    """
+
+    return __generic_opcode_parse(line, shellcode, 'xor')
+
+
+def parse_add_opcode(line, shellcode):
+    """
+    >>> parse_add_opcode('add $0x10,%eax', 'add $0x10,%eax')
+    '83 c010'
+    >>> parse_add_opcode('add $0x1,%eax', 'add $0x1,%eax')
+    '83 c001'
+    >>> parse_add_opcode('add $0x10000000,%eax', 'add $0x10000000,%eax')
+    '0500000010'
+    >>> parse_add_opcode('add $0x1000000,%eax', 'add $0x1000000,%eax')
+    '0500000001'
+    >>> parse_add_opcode('add $0x10000000,%ebx', 'add $0x10000000,%ebx')
+    '81 c300000010'
+    >>> parse_add_opcode('add $0x1000000,%ebx', 'add $0x1000000,%ebx')
+    '81 c300000001'
+    >>> parse_add_opcode('add $0x10000000,%ecx', 'add $0x10000000,%ecx')
+    '81 c100000010'
+    >>> parse_add_opcode('add $0x1000000,%ecx', 'add $0x1000000,%ecx')
+    '81 c100000001'
+    >>> parse_add_opcode('add $0x10000000,%edx', 'add $0x10000000,%edx')
+    '81 c200000010'
+    >>> parse_add_opcode('add $0x1000000,%edx', 'add $0x1000000,%edx')
+    '81 c200000001'
+    """
+    return __generic_opcode_parse(line, shellcode, 'add')
+
+
+def __generic_opcode_parse(line, shellcode, cmd):
+    if '$0x' in line:
+        first_operand = parse_immediate_hex_value_in_first_op(line, pad=True)
+        reg_opcode = get_registry_opcode(line, cmd)
+        if reg_opcode:
+            rep = compatible_stacker_with_preppend(reg_opcode, first_operand)
+            shellcode = shellcode.replace(line, rep)
+
+    return shellcode
+
+
+def __get_short_eax_opcode(line, cmd):
+    second_op = line.rsplit(',')[1]
+    if len(line.rsplit(',')[0]) in [8, 9] and '%eax' in second_op:
+        return {
+            'add': '83 c0',
+            'sub': '83 e8',
+            'xor': '83 f0'
+        }[cmd]
+
+
+def get_registry_opcode(line, cmd):
+    second_op = line.rsplit(',')[1]
+    if len(line.rsplit(',')[0]) >= 14:
+        for reg, opcodes in OPCODES_FOR_REGS.items():
+            if reg in second_op:
+                return opcodes[cmd]
+        return None
+    return __get_short_eax_opcode(line, cmd)
+
+
+def parse_sub_opcode(line, shellcode):
+    """
+    >>> parse_sub_opcode('sub $0x1,%eax', 'sub $0x1,%eax')
+    '83 e801'
+    >>> parse_sub_opcode('sub $0x10000000,%eax', 'sub $0x10000000,%eax')
+    '2d00000010'
+    >>> parse_sub_opcode('sub $0x1000000,%eax', 'sub $0x1000000,%eax')
+    '2d00000001'
+    >>> parse_sub_opcode('sub $0x10000000,%ebx', 'sub $0x10000000,%ebx')
+    '81 eb00000010'
+    >>> parse_sub_opcode('sub $0x1000000,%ebx', 'sub $0x1000000,%ebx')
+    '81 eb00000001'
+    >>> parse_sub_opcode('sub $0x10000000,%ecx', 'sub $0x10000000,%ecx')
+    '81 e900000010'
+    >>> parse_sub_opcode('sub $0x1000000,%ecx', 'sub $0x1000000,%ecx')
+    '81 e900000001'
+    >>> parse_sub_opcode('sub $0x10000000,%edx', 'sub $0x10000000,%edx')
+    '81 ea00000010'
+    >>> parse_sub_opcode('sub $0x1000000,%edx', 'sub $0x1000000,%edx')
+    '81 ea00000001'
+    """
+
+    return __generic_opcode_parse(line, shellcode, 'sub')
+
+
+def __pad(value, pad):
+    if len(value) % 2 and pad:
+        return '0' + value
+
+    return value
+
+
+def parse_immediate_hex_value(line, pad=False):
+    """
+    >>> parse_immediate_hex_value('$0x10')
+    '10'
+    >>> parse_immediate_hex_value('$0x123')
+    '123'
+    >>> parse_immediate_hex_value('$0x1', pad=True)
+    '01'
+    >>> parse_immediate_hex_value('$0x1', pad=False)
+    '1'
+    """
+    return __pad(str(line.rsplit('$0x')[1]), pad)
+
+
+def parse_immediate_hex_value_in_first_op(line, pad=False):
+    """
+    >>> parse_immediate_hex_value_in_first_op('mov $0x10,%al')
+    '10'
+    >>> parse_immediate_hex_value_in_first_op('mov $0x1')
+    '1'
+    >>> parse_immediate_hex_value_in_first_op('mov $0x1', pad=True)
+    '01'
+
+    What about values more than 0xff ???
+    """
+
+    return __pad(parse_immediate_hex_value(line).rsplit(',')[0], pad)
+
+
+def get_second_operand(line):
+    """
+    >>> get_second_operand('mov $0x10,%al')
+    '%al'
+    >>> get_second_operand('mov %bl,$0x10')
+    '$0x10'
+    """
+    return line.rsplit(',')[1]
+
+
+def parse_mov_opcode(line):
+    """
+    >>> parse_mov_opcode('mov $0x10,%al')
+    'b010'
+    >>> parse_mov_opcode('mov $0x10,%bl')
+    'b310'
+    """
+    rep = None
+    if len(line) == 13 or len(line) == 12:
+        if '%al' in get_second_operand(line):
+            rep = 'b0' + parse_immediate_hex_value_in_first_op(line)
+        if '%bl' in get_second_operand(line):
+            rep = 'b3' + parse_immediate_hex_value_in_first_op(line)
+
+    return rep
+
+
+def compatible_stacker(value):
+    rep = None
+    if version() == 2:
+        return stack.st(str(binascii.a2b_hex(value)))
+    if version() == 3:
+        return stack.st(((binascii.a2b_hex(value.encode('latin-1'))).decode('latin-1')))
+
+    return rep
+
+
+def compatible_stacker_with_preppend(predefined, value_to_stack):
+    return predefined + compatible_stacker(value_to_stack)
+
+
+def parse_push_opcode(line, shellcode):
+    if len(line) in [9, 10]:
+        rep = str('6a') + parse_immediate_hex_value(line, pad=True)
+        shellcode = shellcode.replace(line, rep, 1)
+    if len(line) in [15, 16]:
+        immediate_value = parse_immediate_hex_value(line, pad=True)
+        rep = str('68') + compatible_stacker(immediate_value)
+        shellcode = shellcode.replace(line, rep)
+
+    return shellcode
+
+
+def process_shellcode_lines(shellcode):
+    """
+    >>> process_shellcode_lines('mov $0x10,%bl')
+    'b310'
+    """
+    shellcode_lines = shellcode.rsplit('\n')
+    for line in shellcode_lines:
         if 'xor' in line:
-            if '$0x' in line:
-                if '%eax' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) == 8 or len(line.rsplit(',')[
-                                                                0]) == 9:
-                        rep = str('83 f0') + str(line.rsplit('$0x')[1].rsplit(
-                            ',')[0])
-                        shellcode = shellcode.replace(line, rep)
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('35') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('35') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('35') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('35') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ebx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 f3') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 f3') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 f3') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 f3') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ecx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 f1') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 f1') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 f1') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 f1') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%edx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 f2') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 f2') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 f2') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 f2') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-
+            shellcode = parse_xor_opcode(line, shellcode)
         if 'add' in line:
-            if '$0x' in line:
-                if '%eax' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) == 8 or len(line.rsplit(',')[
-                                                                0]) == 9:
-                        rep = str('83 c0') + str(line.rsplit('$0x')[1].rsplit(
-                            ',')[0])
-                        shellcode = shellcode.replace(line, rep)
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('05') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('05') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('05') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('05') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ebx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 c3') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 c3') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 c3') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 c3') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ecx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 c1') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 c1') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 c1') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 c1') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%edx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 c2') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 c2') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 c2') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 c2') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-
+            shellcode = parse_add_opcode(line, shellcode)
         if 'sub' in line:
-            if '$0x' in line:
-                if '%eax' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) == 8 or len(line.rsplit(',')[
-                                                                0]) == 9:
-                        rep = str('83 e8') + str(line.rsplit('$0x')[1].rsplit(
-                            ',')[0])
-                        shellcode = shellcode.replace(line, rep)
-
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('2d') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('2d') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('2d') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('2d') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ebx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 eb') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 eb') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 eb') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 eb') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%ecx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 e9') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 e9') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 e9') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 e9') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
-                if '%edx' in line.rsplit(',')[1]:
-                    if len(line.rsplit(',')[0]) >= 14:
-                        try:
-                            if version() ==2:
-                                rep = str('81 ea') + str(stack.st(
-                                    binascii.a2b_hex(str(line.rsplit('$0x')[
-                                                             1].rsplit(',')[0]))))
-                            if version() ==3:
-                                rep = str('81 ea') + str(stack.st(
-                                    (binascii.a2b_hex((line.rsplit('$0x')[
-                                        1].rsplit(',')[0]).encode('latin-1'))
-                                    ).decode('latin-1')))
-                            shellcode = shellcode.replace(line, rep)
-                        except:
-                            if version() ==2:
-                                rep = str('81 ea') + str(stack.st(
-                                    binascii.a2b_hex(str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0]))))
-                            if version() ==3:
-                                rep = str('81 ea') + str(stack.st((
-                                    binascii.a2b_hex((str('0') + str(
-                                        line.rsplit('$0x')[1].rsplit(',')[
-                                            0])).encode('latin-1'))).decode(
-                                    'latin-1')))
-                        shellcode = shellcode.replace(line, rep)
+            shellcode = parse_sub_opcode(line, shellcode)
         if 'mov $0x' in line:
-            if len(line) == 13 or len(line) == 12:
-                if '%al' in line.rsplit(',')[1]:
-                    rep = str('b0') + str(line.rsplit('$0x')[1].rsplit(',')[0])
-                    shellcode = shellcode.replace(line, rep)
-                if '%bl' in line.rsplit(',')[1]:
-                    rep = str('b3') + str(line.rsplit('$0x')[1].rsplit(',')[0])
+            opcode = parse_mov_opcode(line)
+            if opcode:
+                shellcode = shellcode.replace(line, opcode)
         if 'push $0x' in line:
-            if len(line) == 9:
-                rep = str('6a0') + str(line.rsplit('$0x')[1])
-                shellcode = shellcode.replace(line, rep, 1)
-            if len(line) == 10:
-                rep = str('6a') + str(line.rsplit('$0x')[1])
-                shellcode = shellcode.replace(line, rep, 1)
-            if len(line) == 15:
-                if version() ==2:
-                    rep = str('68') + stack.st(str(binascii.a2b_hex(str(
-                        '0') + str(line.rsplit('$0x')[1]))))
-                if version() ==3:
-                    rep = str('68') + stack.st((binascii.a2b_hex((str(
-                        '0') + str(line.rsplit('$0x')[1])).encode('latin-1'))
-                                               ).decode('latin-1'))
-                shellcode = shellcode.replace(line, rep)
-            if len(line) == 16:
-                if version() ==2:
-                    rep = str('68') + stack.st(str(binascii.a2b_hex(str(
-                        line.rsplit('$0x')[1]))))
-                if version() ==3:
-                    rep = str('68') + stack.st(((binascii.a2b_hex((line.rsplit(
-                        '$0x')[1]).encode('latin-1'))).decode('latin-1')))
-                shellcode = shellcode.replace(line, rep)
+            shellcode = parse_push_opcode(line, shellcode)
+
+    return shellcode
+
+
+def convert(shellcode):
+    """
+    >>> convert('mov $0x10,%bl')
+    '\\\\xb3\\\\x10'
+    """
+    shellcode = preprocess_shellcode(shellcode)
+    shellcode = process_shellcode_lines(shellcode)
     shellcode = stack.shellcoder(shellcode.replace('\n', '').replace(' ', ''))
     return shellcode
